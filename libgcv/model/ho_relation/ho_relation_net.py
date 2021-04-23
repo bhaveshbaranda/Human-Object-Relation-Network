@@ -320,7 +320,7 @@ class HORelationNet(HORelationBase):
         return indices.reshape(1,-1)
 
 def get_horelation(name, dataset, pretrained=False, params='', ctx=mx.cpu(),
-                   root=os.path.join('C:/Users/Bhavesh/Desktop', '.mxnet', 'models'), **kwargs):
+                   root='.', **kwargs):
     r"""Utility function to return a network.
 cls
     Parameters
