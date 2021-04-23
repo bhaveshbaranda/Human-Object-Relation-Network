@@ -258,7 +258,7 @@ class HORelationNet(HORelationBase):
         ####################################### 
         # Adding Class token to each Sequence #
         #######################################
-        top_ctx_feat = mx.nd.Concat(self.embedding(mx.nd.array([1025], ctx=mx.cpu())), top_ctx_feat, dim = 0)
+        top_ctx_feat = mx.nd.Concat(self.embedding(mx.nd.array([1025], ctx=mx.gpu())), top_ctx_feat, dim = 0)
 
         ###############################################
         # Positional Embedding of pooled eye features #
@@ -316,7 +316,7 @@ class HORelationNet(HORelationBase):
         cx = 0.5 * (x_min + x_max) 
         cy = 0.5 * (y_min + y_max)
         indices = 1 + mx.nd.floor(cx/w) + math.floor(W/w) * mx.nd.floor(cy/h)
-        indices = mx.nd.Concat(mx.nd.zeros(shape=(1,1), ctx=mx.cpu()), indices, dim=0)
+        indices = mx.nd.Concat(mx.nd.zeros(shape=(1,1), ctx=mx.gpu()), indices, dim=0)
         return indices.reshape(1,-1)
 
 def get_horelation(name, dataset, pretrained=False, params='', ctx=mx.cpu(),
