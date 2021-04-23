@@ -3,9 +3,13 @@ from __future__ import absolute_import
 
 import os
 import mxnet as mx
+from mxnet import nd as F
 from mxnet.gluon import nn
 from .base import HORelationBase
-from libgcv.model.ho_relation.module import HumanObjectRelationModule
+from libgcv.model.ho_relation.module import MultiHeadAttention 
+from libgcv.model.ho_relation.module import EncoderLayer
+import numpy as np
+import math
 
 
 class HORelationNet(HORelationBase):
@@ -121,7 +125,7 @@ class HORelationNet(HORelationBase):
         Generate training targets with boxes, samples, matches, gt_label and gt_box.
 
     """
-    def __init__(self, features, top_features, classes,
+    def __init__(self,features, top_features, classes,
                  short=600, max_size=1000, train_patterns=None,
                  nms_thresh=0.3, nms_topk=400, post_nms=100,
                  roi_mode='align', roi_size=(14, 14), stride=16, clip=None,
@@ -141,21 +145,46 @@ class HORelationNet(HORelationBase):
         self._max_batch = 1  # currently only support batch size = 1
         self._num_sample = num_sample
         self._num_ctx_per_sample = num_ctx_per_sample
-        self._rpn_test_post_nms = rpn_test_post_nms
+        self._rpn_test_post_nms  = rpn_test_post_nms
         # Use {} to warp non HybridBlock
         self._additional_output = additional_output
+        self.num_blocks = 1 
+        self.image_width = 512
+        self.image_height = 512
+        self.patch_width = 16
+        self.patch_height = 16
+        self.num_patch_horizontal = self.image_width / self.patch_width
+        self.num_patch_vertical = self.image_height / self.patch_height
 
         with self.name_scope():
-            self.fc = nn.Dense(1024, activation='relu', weight_initializer=mx.init.Normal(0.01))
-            self.fc_ctx = nn.Dense(1024, activation='relu', weight_initializer=mx.init.Normal(0.01))
-            self.relation = HumanObjectRelationModule(num_feat=1024, num_group=16, additional_output=additional_output)
+
+            self.fc      = nn.Dense(1024, activation='relu', weight_initializer=mx.init.Normal(0.01))
+            self.fc_ctx  = nn.Dense(1024, activation='relu', weight_initializer=mx.init.Normal(0.01))
+
+            self.embedding   = nn.Embedding(2+int(self.num_patch_horizontal*self.num_patch_vertical), 1024, weight_initializer=mx.init.Normal(0.01))
+            # self.cls_token   = mx.gluon.Parameter(name = 'cls_token', shape=(1, 1024), init = mx.init.Normal(0.01))
+            # self.cls_token.initialize(ctx=[mx.gpu()])
+
+            self.relation = nn.Sequential()
+            for _ in range(self.num_blocks):
+                self.relation.add(
+                    EncoderLayer(num_feat=1024, num_group=16, additional_output=additional_output)
+                )
+            
             self.class_predictor = nn.Dense(
-                self.num_class, weight_initializer=mx.init.Normal(0.01))
-            self.ctx_class_predictor = nn.Dense(
-                self.num_class, weight_initializer=mx.init.Normal(0.01))
+                self.num_class, weight_initializer=mx.init.Normal(0.01)
+            )
+
+            # self.to_scanpath = nn.Dense(
+            #     1, weight_initializer=mx.init.Normal(0.01)
+            # )
+
+            # self.ctx_class_predictor = nn.Dense(
+            #     self.num_class, weight_initializer=mx.init.Normal(0.01)
+            # )
 
     # pylint: disable=arguments-differ
-    def hybrid_forward(self, F, x, gt_box=None, obj_box=None):
+    def forward(self, x, gt_box=None, obj_box=None): 
         """Forward Faster-RCNN network.
 
         The behavior during traing and inference is different.
@@ -165,7 +194,7 @@ class HORelationNet(HORelationBase):
         x : mxnet.nd.NDArray or mxnet.symbol
             The network input tensor.
         gt_box : mxnet.nd.NDArray or mxnet.symbol
-            The ground-truth bbox tensor with shape (1, N, 4).
+            The ground-truth bbox tensor with shape (1, M, 4).
         obj_box : mxnet.nd.NDArray or mxnet.symbol
             The object bbox tensor with shape (1, N, 4).
 
@@ -176,7 +205,16 @@ class HORelationNet(HORelationBase):
             boxes.
 
         """
+        #####################################################
+        # Extracting Features from First 4 Layers of Resnet #
+        #####################################################
+
         feat = self.features(x)
+
+        ################################################ 
+        # ROI Pooling of features using bounding boxes #
+        ################################################
+
         rsn_box = obj_box.reshape((-1, 4))
 
         # create batchid
@@ -196,11 +234,19 @@ class HORelationNet(HORelationBase):
                                                  sample_ratio=2)
         else:
             raise ValueError("Invalid roi mode: {}".format(self._roi_mode))
+        
+        ############################################################ 
+        # Passing the Pooled features through Last Layer of Resnet #
+        ############################################################
 
         # RCNN prediction
         top_feat = self.top_features(pooled_feat)
         # contextual region prediction
         top_ctx_feat = self.top_features(pooled_ctx_feat)
+
+        ########################## 
+        # GLOBAL AVERAGE POOLING #
+        ##########################
 
         if self.use_global_avg_pool:
             top_feat = self.global_avg_pool(top_feat)
@@ -208,34 +254,75 @@ class HORelationNet(HORelationBase):
 
         top_feat = self.fc(top_feat)
         top_ctx_feat = self.fc_ctx(top_ctx_feat)
+
+        ####################################### 
+        # Adding Class token to each Sequence #
+        #######################################
+        top_ctx_feat = mx.nd.Concat(self.embedding(mx.nd.array([1025], ctx=mx.cpu())), top_ctx_feat, dim = 0)
+
+        ###############################################
+        # Positional Embedding of pooled eye features #
+        ###############################################
+
+        pos = self.get_indices(rsn_box)
+        pos_emb = self.embedding(pos).reshape(-1, 1024)
+        top_ctx_feat = top_ctx_feat + pos_emb
+
+        ########################################################################
+        # Passing the pooled eye features(with context information) in Encoder #
+        ########################################################################
+
         if self._additional_output:
-            relation_feat, relation_ctx_feat, relation = \
-                self.relation(top_feat, top_ctx_feat, gt_box.reshape((-1, 4)), rsn_box)
+             relation_ctx_feat, relation = self.relation(top_ctx_feat)
         else:
-            relation_feat, relation_ctx_feat = \
-                self.relation(top_feat, top_ctx_feat, gt_box.reshape((-1, 4)), rsn_box)
-        top_feat = top_feat + relation_feat
-        top_ctx_feat = top_ctx_feat + relation_ctx_feat
+            relation_ctx_feat = self.relation(top_ctx_feat)
+
+        
+        # top_feat = top_feat + relation_feat
+        # top_ctx_feat = top_ctx_feat + relation_ctx_feat
+
+        #####################################################
+        # Using the cls_token to enhance our human features #
+        #####################################################
+        top_feat = F.broadcast_add(top_feat, relation_ctx_feat[0])
+
+        ##################
+        # Classification #
+        ##################
 
         cls_pred = self.class_predictor(top_feat)
-        ctx_cls_pred = self.ctx_class_predictor(top_ctx_feat)
+        # scanpath = self.to_scanpath(relation_ctx_feat[1:]).reshape(1,-1)
+        # scanpath = mx.nd.tile(scanpath, (cls_pred.shape[0], 1))
+        # cls_pred = mx.nd.Concat(cls_pred, scanpath, dim=1)
+
+
+        # ctx_cls_pred = self.ctx_class_predictor(top_ctx_feat)
 
         # cls_pred (B * N, C) -> (B, N, C)
-        cls_pred = cls_pred.reshape((self._max_batch, -1, self.num_class))
-        ctx_cls_pred = ctx_cls_pred.reshape((self._max_batch, -1, self.num_class))
+        cls_pred = cls_pred.reshape((self._max_batch, -1, self.num_class))#+scanpath.shape[1]))
+        # ctx_cls_pred = ctx_cls_pred.reshape((self._max_batch, -1, self.num_class))
 
-        ctx_cls_pred = ctx_cls_pred.max(axis=1, keepdims=True)
-        cls_pred = F.broadcast_add(cls_pred, ctx_cls_pred)
+        # ctx_cls_pred = ctx_cls_pred.max(axis=1, keepdims=True)
+        # cls_pred = F.broadcast_add(cls_pred, ctx_cls_pred)
 
         if self._additional_output:
             return cls_pred, relation
         return cls_pred
-
+    
+    def get_indices(self, boxes):
+        W, H = self.image_width, self.image_height
+        w, h = self.patch_width, self.patch_height
+        x_min, y_min, x_max, y_max = F.split(data=boxes, num_outputs=4, axis=1)
+        cx = 0.5 * (x_min + x_max) 
+        cy = 0.5 * (y_min + y_max)
+        indices = 1 + mx.nd.floor(cx/w) + math.floor(W/w) * mx.nd.floor(cy/h)
+        indices = mx.nd.Concat(mx.nd.zeros(shape=(1,1), ctx=mx.cpu()), indices, dim=0)
+        return indices.reshape(1,-1)
 
 def get_horelation(name, dataset, pretrained=False, params='', ctx=mx.cpu(),
-                   root=os.path.join('~', '.mxnet', 'models'), **kwargs):
+                   root=os.path.join('C:/Users/Bhavesh/Desktop', '.mxnet', 'models'), **kwargs):
     r"""Utility function to return a network.
-
+cls
     Parameters
     ----------
     name : str
@@ -270,7 +357,7 @@ def horelation_resnet50_v1d_voca(pretrained=False, pretrained_base=True, transfe
     r"""Human-object Relation Model
 
     Parameters
-    ----------
+    ---------- 
     pretrained : bool, optional, default is False
         Load pretrained weights.
     pretrained_base : bool, optional, default is True
@@ -286,7 +373,7 @@ def horelation_resnet50_v1d_voca(pretrained=False, pretrained_base=True, transfe
     root : str, default '~/.mxnet/models'
         Location for keeping the model parameters.
 
-    """
+    """ 
     if transfer is None:
         from ..resnetv1b import resnet50_v1d
         from ...data import VOCAction
@@ -303,7 +390,7 @@ def horelation_resnet50_v1d_voca(pretrained=False, pretrained_base=True, transfe
         return get_horelation(
             name='resnet50_v1d', dataset='voca', pretrained=pretrained,
             features=features, top_features=top_features, classes=classes,
-            short=600, max_size=1000, train_patterns=train_patterns,
+            short=512, max_size=512, train_patterns=train_patterns,
             nms_thresh=0.3, nms_topk=400, post_nms=100,
             roi_mode='align', roi_size=(14, 14), stride=16, clip=None,
             rpn_channel=1024, base_size=16, scales=(2, 4, 8, 16, 32),
