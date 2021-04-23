@@ -4,9 +4,10 @@ from __future__ import absolute_import
 import mxnet as mx
 from mxnet import gluon
 from mxnet.gluon import nn
+from mxnet import nd as F
 
 
-class HORelationBase(gluon.HybridBlock):
+class HORelationBase(gluon.Block):
     """Human-object Relation Network.
 
     Parameters
@@ -158,6 +159,6 @@ class HORelationBase(gluon.HybridBlock):
         self.num_class = len(classes)
 
     # pylint: disable=arguments-differ
-    def hybrid_forward(self, F, x, width, height):
+    def forward(self, x, width, height):
         """Not implemented yet."""
         raise NotImplementedError
