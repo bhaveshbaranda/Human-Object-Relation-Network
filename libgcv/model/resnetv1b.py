@@ -51,7 +51,7 @@ class BasicBlockV1b(HybridBlock):
         out = self.relu2(out)
 
         return out
-
+ 
 class BottleneckV1b(HybridBlock):
     """ResNetV1b BottleneckV1b
     """
@@ -492,7 +492,7 @@ def resnet152_v1c(pretrained=False, root='~/.mxnet/models', ctx=cpu(0), **kwargs
                                              root=root), ctx=ctx)
     return model
 
-def resnet50_v1d(pretrained=False, root='~/.mxnet/models', ctx=cpu(0), name_prefix='resnetv1d_', **kwargs):
+def resnet50_v1d(pretrained=False, root='./.mxnet/models', ctx=cpu(0), name_prefix='resnetv1d_', **kwargs):
     """Constructs a ResNetV1d-50 model.
 
     Parameters
