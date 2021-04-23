@@ -13,6 +13,8 @@ import pickle as pkl
 from ..base import VisionDataset
 from ..transforms import bbox
 
+import math
+
 
 class VOCAction(VisionDataset):
     """Pascal VOC2012 Action Dataset.
@@ -29,7 +31,7 @@ class VOCAction(VisionDataset):
         names to indicies. Use by advanced users only, when you want to swap the orders
         of class labels.
     preload_label : bool, default True
-        If True, then parse and load all labels into memory during
+        If Tr ue, then parse and load all labels into memory during
         initialization. It often accelerate speed but require more memory
         usage. Typical preloaded labels took tens of MB. You only need to disable it
         when your dataset is extreamly large.
@@ -37,7 +39,7 @@ class VOCAction(VisionDataset):
     CLASSES = ('jumping', 'phoning', 'playinginstrument', 'reading', 'ridingbike',
                'ridinghorse', 'running', 'takingphoto', 'usingcomputer', 'walking', 'other')
 
-    def __init__(self, root=os.path.join('~', 'data', 'VOCdevkit'),
+    def __init__(self, root=os.path.join('.', 'data', 'VOCdevkit'),
                  split='train', index_map=None, preload_label=True,
                  augment_box=False, load_box=False, random_cls=False):
         super(VOCAction, self).__init__(root)
@@ -54,8 +56,8 @@ class VOCAction(VisionDataset):
         else:
             self._jumping_start_pos = 0
         self._items = self._load_items(split)
-        self._anno_path = os.path.join(self._root, 'Annotations', '{}.xml')
-        self._box_path = os.path.join(self._root, 'Boxes', '{}.pkl')
+        self._anno_path  = os.path.join(self._root, 'Annotations', '{}.xml')
+        self._box_path   = os.path.join(self._root, 'Boxes', '{}.pkl')
         self._image_path = os.path.join(self._root, 'JPEGImages', '{}.jpg')
         self.index_map = index_map or dict(zip(self.classes, range(self.num_class)))
         self._label_cache = self._preload_labels() if preload_label else None
@@ -82,7 +84,8 @@ class VOCAction(VisionDataset):
         return len(self._items)
 
     def __getitem__(self, idx):
-        img_id = self._items[idx]
+        fid = self._items[idx]
+        img_id = fid[4:]
         img_path = self._image_path.format(img_id)
         label = self._label_cache[idx] if self._label_cache else self._load_label(idx)
         img = mx.image.imread(img_path, 1)
@@ -94,11 +97,21 @@ class VOCAction(VisionDataset):
             h, w, _ = img.shape
             label = bbox.augment(label, img_w=w, img_h=h, output_num=16)
         if self._load_box:
-            box_path = self._box_path.format(img_id)
+            box_path = self._box_path.format(fid)
             with open(box_path, 'rb') as f:
                 box = pkl.load(f)
+            # label = np.concatenate([label, self.get_indices(box)], axis=1)
             return img, label, box
         return img, label
+    
+    def get_indices(self, boxes):
+        W, H = 512, 512
+        w, h = 16, 16
+        x_min, y_min, x_max, y_max = np.split(boxes, 4, axis=1)
+        cx = 0.5 * (x_min + x_max) 
+        cy = 0.5 * (y_min + y_max)
+        indices = 1 + np.floor(cx/w) + int(math.floor(W/w)) * np.floor(cy/h)
+        return indices.reshape(1,-1)
 
     def _load_items(self, split):
         """Load individual image indices from split."""
@@ -110,28 +123,30 @@ class VOCAction(VisionDataset):
 
     def _load_label(self, idx):
         """Parse xml file and return labels."""
-        img_id = self._items[idx]
+        fid = self._items[idx]
+        img_id = fid[4:]
         anno_path = self._anno_path.format(img_id)
         root = ET.parse(anno_path).getroot()
         size = root.find('size')
         width = float(size.find('width').text)
         height = float(size.find('height').text)
+        sx = 512 / width
+        sy = 512 / height
         if idx not in self._im_shapes:
             # store the shapes for later usage
-            self._im_shapes[idx] = (width, height)
+            self._im_shapes[idx] = (512, 512)
         label = []
         for obj in root.iter('object'):
             cls_name = obj.find('name').text.strip().lower()
             if cls_name != 'person':
                 continue
-
             xml_box = obj.find('bndbox')
             xmin = (float(xml_box.find('xmin').text) - 1)
             ymin = (float(xml_box.find('ymin').text) - 1)
             xmax = (float(xml_box.find('xmax').text) - 1)
             ymax = (float(xml_box.find('ymax').text) - 1)
             try:
-                self._validate_label(xmin, ymin, xmax, ymax, width, height)
+                self._validate_label(sx*xmin, sy*ymin, sx*xmax, sy*ymax, 512, 512)
             except AssertionError as e:
                 raise RuntimeError("Invalid label at {}, {}".format(anno_path, e))
 
@@ -147,17 +162,17 @@ class VOCAction(VisionDataset):
                     if is_action > 0.5:
                         cls_id = i
                         cls_array[i] = 1
-            anno = [xmin, ymin, xmax, ymax, cls_id]
+            anno = [sx*xmin, sy*ymin, sx*xmax, sy*ymax, cls_id]
             anno.extend(cls_array)
             label.append(anno)
         return np.array(label)
 
     def _validate_label(self, xmin, ymin, xmax, ymax, width, height):
         """Validate labels."""
-        assert 0 <= xmin < width, "xmin must in [0, {}), given {}".format(width, xmin)
-        assert 0 <= ymin < height, "ymin must in [0, {}), given {}".format(height, ymin)
-        assert xmin < xmax <= width, "xmax must in (xmin, {}], given {}".format(width, xmax)
-        assert ymin < ymax <= height, "ymax must in (ymin, {}], given {}".format(height, ymax)
+        assert 0 <= xmin < width,      "xmin must in [0, {}), given {}".format(width, xmin)
+        assert 0 <= ymin < height,     "ymin must in [0, {}), given {}".format(height, ymin)
+        assert xmin < xmax <= width,   "xmax must in (xmin, {}], given {}".format(width, xmax)
+        assert ymin < ymax <= height,  "ymax must in (ymin, {}], given {}".format(height, ymax)
 
     def _preload_labels(self):
         """Preload all labels into memory."""
