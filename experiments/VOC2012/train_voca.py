@@ -83,7 +83,7 @@ class RCNNAccMetric(mx.metric.EvalMetric):
     def __init__(self):
         super(RCNNAccMetric, self).__init__('RCNNAcc')
 
-    def update(self, labels, preds, scanpath_labels, scanpath_preds):
+    def update(self, labels, preds):
         # label = [rcnn_label]
         # pred = [rcnn_cls]
         rcnn_label = labels[0]
@@ -296,7 +296,7 @@ def train(net, train_data, val_data, eval_metric, ctx, args):
                     # overall losses
                     losses.append(rcnn_loss.sum())
                     metric_losses[0].append(rcnn_loss.sum())
-                    add_losses[0].append([[gt_label], [cls_pred], [gt_scanpath], [pred_scanpath]])
+                    add_losses[0].append([[gt_label], [cls_pred]])
                 autograd.backward(losses)
                 # print("losses:",losses)
                 # print("metric_losses:",metric_losses)
