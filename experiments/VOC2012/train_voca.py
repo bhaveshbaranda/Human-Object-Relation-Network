@@ -305,7 +305,7 @@ def train(net, train_data, val_data, eval_metric, ctx, args):
                     metric.update(0, record)
                 for metric, records in zip(metrics2, add_losses):
                     for pred in records:
-                        metric.update(pred[0], pred[1], pred[2], pred[3])
+                        metric.update(pred[0], pred[1])
             trainer.step(batch_size)
 
             # update metrics
