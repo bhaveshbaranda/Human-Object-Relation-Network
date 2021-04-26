@@ -1,27 +1,32 @@
+import sys
+#sys.path.append('C:/Users/Bhavesh/Desktop/Project/Human-Object-Relation-Network-master')
+from libgcv.nn.lr_schedule import CosineAnnealingSchedule
+from libgcv.utils.metrics.voc_multi_classification import VOCMultiClsMApMetric
+from libgcv.data.transforms.presets.horelation import HORelationDefaultTrainTransform, HORelationDefaultValTransform
+from libgcv.data import batchify
+from libgcv.model import get_model
+from libgcv import utils as gutils
+from libgcv import data as gdata
+import libgcv
+from mxnet import autograd
+from mxnet import gluon
+import mxnet as mx
+import time
+import logging
 import argparse
 import sys
 import os
+import math
 # disable autotune
 os.environ['MXNET_CUDNN_AUTOTUNE_DEFAULT'] = '0'
 # add module path
-sys.path.append(os.path.abspath(os.path.join(__file__, os.pardir, os.pardir, os.pardir)))
-import logging
-import time
-import mxnet as mx
-from mxnet import gluon
-from mxnet import autograd
-import libgcv
-from libgcv import data as gdata
-from libgcv import utils as gutils
-from libgcv.model import get_model
-from libgcv.data import batchify
-from libgcv.data.transforms.presets.horelation import HORelationDefaultTrainTransform, HORelationDefaultValTransform
-from libgcv.utils.metrics.voc_multi_classification import VOCMultiClsMApMetric
-from libgcv.nn.lr_schedule import CosineAnnealingSchedule
+sys.path.append(os.path.abspath(os.path.join(
+    __file__, os.pardir, os.pardir, os.pardir)))
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description='Train Human-object Relation networks.')
+    parser = argparse.ArgumentParser(
+        description='Train Human-object Relation networks.')
     parser.add_argument('--network', type=str, default='resnet50_v1d',
                         help="Base network name which serves as feature extraction base.")
     parser.add_argument('--dataset', type=str, default='voca',
@@ -78,15 +83,32 @@ class RCNNAccMetric(mx.metric.EvalMetric):
     def __init__(self):
         super(RCNNAccMetric, self).__init__('RCNNAcc')
 
-    def update(self, labels, preds):
+    def update(self, labels, preds, scanpath_labels, scanpath_preds):
         # label = [rcnn_label]
         # pred = [rcnn_cls]
         rcnn_label = labels[0]
-        rcnn_cls = preds[0]
+        rcnn_cls =   preds[0]
+        rcnn_label_sp = scanpath_labels[0]
+        rcnn_cls_sp =   scanpath_preds[0].reshape(-1,scanpath_preds[0].shape[0], scanpath_preds[0].shape[1])
+        # print(rcnn_label.shape, rcnn_cls.shape, rcnn_label_sp.shape, rcnn_cls_sp.shape)
 
         # calculate num_acc
-        pred_label = mx.nd.argmax(rcnn_cls, axis=-1)
-        num_acc = mx.nd.sum(pred_label == rcnn_label)
+        pred_label    = mx.nd.argmax(rcnn_cls, axis=-1)
+        pred_label_sp = 1 + mx.nd.argmax(rcnn_cls_sp, axis=-1)
+
+        # print(pred_label, pred_label_sp)
+        pred_label = mx.nd.Concat(pred_label, pred_label_sp, dim=1)
+        # print(pred_label)
+
+        # print(rcnn_label, rcnn_label_sp)
+        rcnn_label = mx.nd.Concat(rcnn_label, rcnn_label_sp, dim=0)
+        # print(rcnn_label)
+
+        # print(pred_label, rcnn_label.transpose())
+        num_acc = mx.nd.sum(pred_label == rcnn_label.transpose())
+    
+
+        # print(num_acc)
 
         self.sum_metric += num_acc.asscalar()
         self.num_inst += rcnn_label.size
@@ -94,11 +116,14 @@ class RCNNAccMetric(mx.metric.EvalMetric):
 
 def get_dataset(dataset, args):
     if dataset.lower() == 'voca':
-        train_dataset = gdata.VOCAction(split='train', augment_box=True, load_box=True)
+        train_dataset = gdata.VOCAction(
+            split='train', augment_box=False, load_box=True)
         val_dataset = gdata.VOCAction(split='val', load_box=True)
-        val_metric = VOCMultiClsMApMetric(class_names=val_dataset.classes, ignore_label=-1, voc_action_type=True)
+        val_metric = VOCMultiClsMApMetric(
+            class_names=val_dataset.classes, ignore_label=-1, voc_action_type=True)
     else:
-        raise NotImplementedError('Dataset: {} not implemented.'.format(dataset))
+        raise NotImplementedError(
+            'Dataset: {} not implemented.'.format(dataset))
     return train_dataset, val_dataset, val_metric
 
 
@@ -106,11 +131,13 @@ def get_dataloader(net, train_dataset, val_dataset, batch_size, num_workers):
     """Get dataloader."""
     train_bfn = batchify.Tuple(*[batchify.Append() for _ in range(3)])
     train_loader = mx.gluon.data.DataLoader(
-        train_dataset.transform(HORelationDefaultTrainTransform(net.short, net.max_size)),
+        train_dataset.transform(
+            HORelationDefaultTrainTransform(net.short, net.max_size)),
         batch_size, True, batchify_fn=train_bfn, last_batch='rollover', num_workers=num_workers)
     val_bfn = batchify.Tuple(*[batchify.Append() for _ in range(3)])
     val_loader = mx.gluon.data.DataLoader(
-        val_dataset.transform(HORelationDefaultValTransform(net.short, net.max_size)),
+        val_dataset.transform(
+            HORelationDefaultValTransform(net.short, net.max_size)),
         batch_size, False, batchify_fn=val_bfn, last_batch='keep', num_workers=num_workers)
     return train_loader, val_loader
 
@@ -127,7 +154,8 @@ def save_params(net, logger, best_map, current_map, epoch, save_interval, prefix
     if save_interval and (epoch + 1) % save_interval == 0:
         logger.info('[Epoch {}] Saving parameters to {}'.format(
             epoch, '{:s}_{:04d}_{:.4f}.params'.format(prefix, epoch, current_map)))
-        net.save_parameters('{:s}_{:04d}_{:.4f}.params'.format(prefix, epoch, current_map))
+        net.save_parameters('{:s}_{:04d}_{:.4f}.params'.format(
+            prefix, epoch, current_map))
 
 
 def split_and_load(batch, ctx_list):
@@ -150,7 +178,7 @@ def validate(net, val_data, ctx, eval_metric):
         for data, label, box in zip(*batch):
             gt_box = label[:, :, :4]
             # get prediction results
-            cls_score = net(data, gt_box, box)
+            cls_score, _ = net(data, gt_box, box)
             # shape (B, N, C)
             cls_score = mx.nd.softmax(cls_score, axis=-1)
             cls_scores.append(cls_score[:, :, :])
@@ -164,7 +192,14 @@ def validate(net, val_data, ctx, eval_metric):
 
 def get_lr_at_iter(alpha):
     return 1. / 3. * (1 - alpha) + alpha
-
+def get_indices(boxes):
+        W, H = 512,512
+        w, h = 16, 16
+        x_min, y_min, x_max, y_max = mx.nd.split(data=boxes, num_outputs=4, axis=1)
+        cx = 0.5 * (x_min + x_max) 
+        cy = 0.5 * (y_min + y_max)
+        indices = 1 + mx.nd.floor(cx/w) + math.floor(W/w) * mx.nd.floor(cy/h)
+        return indices.reshape(-1,1)
 
 def train(net, train_data, val_data, eval_metric, ctx, args):
     """Training pipeline"""
@@ -180,10 +215,12 @@ def train(net, train_data, val_data, eval_metric, ctx, args):
 
     lr_warmup = float(args.lr_warmup)  # avoid int division
     # cosine lr annealing
-    lr_annealing = CosineAnnealingSchedule(min_lr=args.min_lr, max_lr=args.max_lr, cycle_length=args.cycle_len)
+    lr_annealing = CosineAnnealingSchedule(
+        min_lr=args.min_lr, max_lr=args.max_lr, cycle_length=args.cycle_len)
     epoch_size = len(train_data._dataset)
 
-    rcnn_cls_loss = mx.gluon.loss.SoftmaxCrossEntropyLoss()
+    rcnn_cls_loss  = mx.gluon.loss.SoftmaxCrossEntropyLoss()
+    rcnn_cls_loss1 = mx.gluon.loss.SoftmaxCrossEntropyLoss()
     metrics = [mx.metric.Loss('RCNN_CrossEntropy'), ]
 
     rcnn_acc_metric = RCNNAccMetric()
@@ -206,7 +243,6 @@ def train(net, train_data, val_data, eval_metric, ctx, args):
     # logger.info('Load Trainer State: hcrnboxv1a_resnet50_v1d_voca_0008_0.9102_trainer.state')
     # trainer.load_states("hcrnboxv1a_resnet50_v1d_voca_0008_0.9102_trainer.state")
     logger.info('Start training from [Epoch {}]'.format(args.start_epoch))
-    print('Start training from [Epoch {}]'.format(args.start_epoch))
     best_map = [0]
     for epoch in range(args.start_epoch, args.epochs):
         for metric in metrics:
@@ -217,71 +253,89 @@ def train(net, train_data, val_data, eval_metric, ctx, args):
         btic = time.time()
         net.hybridize(static_alloc=True)
         base_lr = trainer.learning_rate
+
         for i, batch in enumerate(train_data):
+
             if epoch == 0 and i <= lr_warmup:
                 # adjust based on real percentage
                 new_lr = base_lr * get_lr_at_iter(i / lr_warmup)
                 if new_lr != trainer.learning_rate:
                     if i % args.log_interval == 0:
-                        logger.info('[Epoch 0 Iteration {}] Set learning rate to {}'.format(i, new_lr))
-                        print('[Epoch 0 Iteration {}] Set learning rate to {}'.format(i, new_lr))
+                        logger.info(
+                            '[Epoch 0 Iteration {}] Set learning rate to {}'.format(i, new_lr))
                     trainer.set_learning_rate(new_lr)
             elif i % args.log_interval == 0:
                 new_lr = lr_annealing(epoch * epoch_size + i)
-                logger.info('[Epoch {} Iteration {}] Set learning rate to {}'.format(epoch, i, new_lr))
-                print('[Epoch {} Iteration {}] Set learning rate to {}'.format(epoch, i, new_lr))
+                logger.info(
+                    '[Epoch {} Iteration {}] Set learning rate to {}'.format(epoch, i, new_lr))
                 trainer.set_learning_rate(new_lr)
+
             batch = split_and_load(batch, ctx_list=ctx)
             batch_size = len(batch[0])
             losses = []
             metric_losses = [[] for _ in metrics]
             add_losses = [[] for _ in metrics2]
+
             with autograd.record():
                 for data, label, box in zip(*batch):
                     gt_label = label[:, :, 4:5].squeeze(axis=-1)
                     gt_box = label[:, :, :4]
-                    cls_pred = net(data, gt_box, box)
+                    cls_pred, pred_scanpath = net(data, gt_box, box)
+                    # print(data.shape, box.shape, gt_box.shape)
+                    # print(cls_pred.shape)
+                    # pdb.set_trace()
                     # losses of rcnn
-                    rcnn_loss = rcnn_cls_loss(cls_pred, gt_label)
+                    gt_scanpath = get_indices(box.reshape(-1,4))
+                    x = rcnn_cls_loss(cls_pred, gt_label)
+                    y = rcnn_cls_loss1(pred_scanpath, gt_scanpath)
+                    rcnn_loss =  x + y.sum()
+                    
                     # overall losses
                     losses.append(rcnn_loss.sum())
                     metric_losses[0].append(rcnn_loss.sum())
-                    add_losses[0].append([[gt_label], [cls_pred]])
+                    add_losses[0].append([[gt_label], [cls_pred], [gt_scanpath], [pred_scanpath]])
                 autograd.backward(losses)
+                # print("losses:",losses)
+                # print("metric_losses:",metric_losses)
+                # print("add_losses:",add_losses)
                 for metric, record in zip(metrics, metric_losses):
                     metric.update(0, record)
                 for metric, records in zip(metrics2, add_losses):
                     for pred in records:
-                        metric.update(pred[0], pred[1])
+                        metric.update(pred[0], pred[1], pred[2], pred[3])
             trainer.step(batch_size)
+
             # update metrics
             if args.log_interval and not (i + 1) % args.log_interval:
                 # msg = ','.join(['{}={:.3f}'.format(*metric.get()) for metric in metrics])
-                msg = ','.join(['{}={:.3f}'.format(*metric.get()) for metric in metrics + metrics2])
+                msg = ','.join(['{}={:.3f}'.format(*metric.get())
+                               for metric in metrics + metrics2])
                 logger.info('[Epoch {}][Batch {}], Speed: {:.3f} samples/sec, {}'.format(
-                    epoch, i, args.log_interval * batch_size/(time.time()-btic), msg))
-                print('[Epoch {}][Batch {}], Speed: {:.3f} samples/sec, {}'.format(
                     epoch, i, args.log_interval * batch_size/(time.time()-btic), msg))
                 btic = time.time()
 
-        msg = ','.join(['{}={:.3f}'.format(*metric.get()) for metric in metrics])
+        msg = ','.join(['{}={:.3f}'.format(*metric.get())
+                       for metric in metrics])
         logger.info('[Epoch {}] Training cost: {:.3f}, {}'.format(
             epoch, (time.time()-tic), msg))
-        print('[Epoch {}] Training cost: {:.3f}, {}'.format(
-            epoch, (time.time()-tic), msg))
+
         if not (epoch + 1) % args.val_interval:
             # consider reduce the frequency of validation to save time
             map_name, mean_ap = validate(net, val_data, ctx, eval_metric)
-            val_msg = '\n'.join(['{}={}'.format(k, v) for k, v in zip(map_name, mean_ap)])
+            val_msg = '\n'.join(['{}={}'.format(k, v)
+                                for k, v in zip(map_name, mean_ap)])
             logger.info('[Epoch {}] Validation: \n{}'.format(epoch, val_msg))
-            print('[Epoch {}] Validation: \n{}'.format(epoch, val_msg))
             current_map = float(mean_ap[-1])
-            outputs_file_name = '{:s}_{:04d}_val_outputs.csv'.format(args.save_prefix, epoch)
+            outputs_file_name = '{:s}_{:04d}_val_outputs.csv'.format(
+                args.save_prefix, epoch)
             eval_metric.save(file_name=outputs_file_name)
-            trainer.save_states('{:s}_{:04d}_{:.4f}_trainer.state'.format(args.save_prefix, epoch, current_map))
+            trainer.save_states('{:s}_{:04d}_{:.4f}_trainer.state'.format(
+                args.save_prefix, epoch, current_map))
         else:
             current_map = 0.
-        save_params(net, logger, best_map, current_map, epoch, args.save_interval, args.save_prefix)
+
+        save_params(net, logger, best_map, current_map, epoch,
+                    args.save_interval, args.save_prefix)
 
 
 if __name__ == '__main__':
@@ -292,6 +346,7 @@ if __name__ == '__main__':
     # training contexts
     ctx = [mx.gpu(int(i)) for i in args.gpus.split(',') if i.strip()]
     ctx = ctx if ctx else [mx.cpu()]
+#     ctx = [mx.cpu()]
     args.batch_size = len(ctx)  # 1 batch per device
 
     # network
@@ -310,7 +365,8 @@ if __name__ == '__main__':
     # training data
     train_dataset, val_dataset, eval_metric = get_dataset(args.dataset, args)
     train_data, val_data = get_dataloader(
-        net, train_dataset, val_dataset, args.batch_size, args.num_workers)
+        net, train_dataset, val_dataset, args.batch_size, args.num_workers
+    )
 
     # training
     train(net, train_data, val_data, eval_metric, ctx, args)
