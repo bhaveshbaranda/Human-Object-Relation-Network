@@ -88,13 +88,13 @@ class RCNNAccMetric(mx.metric.EvalMetric):
         # pred = [rcnn_cls]
         rcnn_label = labels[0]
         rcnn_cls =   preds[0]
-        rcnn_label_sp = scanpath_labels[0]
-        rcnn_cls_sp =   scanpath_preds[0].reshape(-1,scanpath_preds[0].shape[0], scanpath_preds[0].shape[1])
+#         rcnn_label_sp = scanpath_labels[0]
+#         rcnn_cls_sp =   scanpath_preds[0].reshape(-1,scanpath_preds[0].shape[0], scanpath_preds[0].shape[1])
         # print(rcnn_label.shape, rcnn_cls.shape, rcnn_label_sp.shape, rcnn_cls_sp.shape)
 
         # calculate num_acc
         pred_label    = mx.nd.argmax(rcnn_cls, axis=-1)
-        pred_label_sp = 1 + mx.nd.argmax(rcnn_cls_sp, axis=-1)
+#         pred_label_sp = 1 + mx.nd.argmax(rcnn_cls_sp, axis=-1)
 
         # print(pred_label, pred_label_sp)
 #         pred_label = mx.nd.Concat(pred_label, pred_label_sp, dim=1)
@@ -220,7 +220,7 @@ def train(net, train_data, val_data, eval_metric, ctx, args):
     epoch_size = len(train_data._dataset)
 
     rcnn_cls_loss  = mx.gluon.loss.SoftmaxCrossEntropyLoss()
-    rcnn_cls_loss1 = mx.gluon.loss.SoftmaxCrossEntropyLoss()
+#     rcnn_cls_loss1 = mx.gluon.loss.SoftmaxCrossEntropyLoss()
     metrics = [mx.metric.Loss('RCNN_CrossEntropy'), ]
 
     rcnn_acc_metric = RCNNAccMetric()
@@ -288,10 +288,10 @@ def train(net, train_data, val_data, eval_metric, ctx, args):
                     # print(cls_pred.shape)
                     # pdb.set_trace()
                     # losses of rcnn
-                    gt_scanpath = get_indices(box.reshape(-1,4))
+#                     gt_scanpath = get_indices(box.reshape(-1,4))
                     x = rcnn_cls_loss(cls_pred, gt_label)
-                    y = rcnn_cls_loss1(pred_scanpath, gt_scanpath)
-                    rcnn_loss =  x + y.sum()
+#                     y = rcnn_cls_loss1(pred_scanpath, gt_scanpath)
+                    rcnn_loss =  x #+ y.sum()
                     
                     # overall losses
                     losses.append(rcnn_loss.sum())
