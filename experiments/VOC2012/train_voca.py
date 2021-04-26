@@ -243,6 +243,7 @@ def train(net, train_data, val_data, eval_metric, ctx, args):
     # logger.info('Load Trainer State: hcrnboxv1a_resnet50_v1d_voca_0008_0.9102_trainer.state')
     # trainer.load_states("hcrnboxv1a_resnet50_v1d_voca_0008_0.9102_trainer.state")
     logger.info('Start training from [Epoch {}]'.format(args.start_epoch))
+    print('Start training from [Epoch {}]'.format(args.start_epoch))
     best_map = [0]
     for epoch in range(args.start_epoch, args.epochs):
         for metric in metrics:
@@ -263,11 +264,13 @@ def train(net, train_data, val_data, eval_metric, ctx, args):
                     if i % args.log_interval == 0:
                         logger.info(
                             '[Epoch 0 Iteration {}] Set learning rate to {}'.format(i, new_lr))
+                        print('[Epoch 0 Iteration {}] Set learning rate to {}'.format(i, new_lr))
                     trainer.set_learning_rate(new_lr)
             elif i % args.log_interval == 0:
                 new_lr = lr_annealing(epoch * epoch_size + i)
                 logger.info(
                     '[Epoch {} Iteration {}] Set learning rate to {}'.format(epoch, i, new_lr))
+                print('[Epoch {} Iteration {}] Set learning rate to {}'.format(epoch, i, new_lr))
                 trainer.set_learning_rate(new_lr)
 
             batch = split_and_load(batch, ctx_list=ctx)
@@ -312,11 +315,15 @@ def train(net, train_data, val_data, eval_metric, ctx, args):
                                for metric in metrics + metrics2])
                 logger.info('[Epoch {}][Batch {}], Speed: {:.3f} samples/sec, {}'.format(
                     epoch, i, args.log_interval * batch_size/(time.time()-btic), msg))
+                print('[Epoch {}][Batch {}], Speed: {:.3f} samples/sec, {}'.format(
+                    epoch, i, args.log_interval * batch_size/(time.time()-btic), msg))
                 btic = time.time()
 
         msg = ','.join(['{}={:.3f}'.format(*metric.get())
                        for metric in metrics])
         logger.info('[Epoch {}] Training cost: {:.3f}, {}'.format(
+            epoch, (time.time()-tic), msg))
+        print('[Epoch {}] Training cost: {:.3f}, {}'.format(
             epoch, (time.time()-tic), msg))
 
         if not (epoch + 1) % args.val_interval:
@@ -325,6 +332,7 @@ def train(net, train_data, val_data, eval_metric, ctx, args):
             val_msg = '\n'.join(['{}={}'.format(k, v)
                                 for k, v in zip(map_name, mean_ap)])
             logger.info('[Epoch {}] Validation: \n{}'.format(epoch, val_msg))
+            print('[Epoch {}] Validation: \n{}'.format(epoch, val_msg))
             current_map = float(mean_ap[-1])
             outputs_file_name = '{:s}_{:04d}_val_outputs.csv'.format(
                 args.save_prefix, epoch)
