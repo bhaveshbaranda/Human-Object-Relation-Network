@@ -304,10 +304,11 @@ class HORelationNet(HORelationBase):
 
         # ctx_cls_pred = ctx_cls_pred.max(axis=1, keepdims=True)
         # cls_pred = F.broadcast_add(cls_pred, ctx_cls_pred)
+        extra_data = relation_ctx_feat[1:]
 
         if self._additional_output:
-            return cls_pred, relation
-        return cls_pred
+            return cls_pred, relation, extra_data
+        return cls_pred, extra_data
     
     def get_indices(self, boxes):
         W, H = self.image_width, self.image_height
@@ -320,7 +321,7 @@ class HORelationNet(HORelationBase):
         return indices.reshape(1,-1)
 
 def get_horelation(name, dataset, pretrained=False, params='', ctx=mx.cpu(),
-                   root='.', **kwargs):
+                   root=os.path.join('C:/Users/Bhavesh/Desktop', '.mxnet', 'models'), **kwargs):
     r"""Utility function to return a network.
 cls
     Parameters
