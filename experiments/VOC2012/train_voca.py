@@ -97,15 +97,15 @@ class RCNNAccMetric(mx.metric.EvalMetric):
         pred_label_sp = 1 + mx.nd.argmax(rcnn_cls_sp, axis=-1)
 
         # print(pred_label, pred_label_sp)
-        pred_label = mx.nd.Concat(pred_label, pred_label_sp, dim=1)
+#         pred_label = mx.nd.Concat(pred_label, pred_label_sp, dim=1)
         # print(pred_label)
 
         # print(rcnn_label, rcnn_label_sp)
-        rcnn_label = mx.nd.Concat(rcnn_label, rcnn_label_sp.reshape(1,-1), dim=1)
+#         rcnn_label = mx.nd.Concat(rcnn_label, rcnn_label_sp.reshape(1,-1), dim=1)
         # print(rcnn_label)
 
         # print(pred_label, rcnn_label.transpose())
-        num_acc = mx.nd.sum(pred_label == rcnn_label.transpose())
+        num_acc = mx.nd.sum(pred_label == rcnn_label)
     
 
         # print(num_acc)
