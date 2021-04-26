@@ -148,7 +148,7 @@ class HORelationNet(HORelationBase):
         self._rpn_test_post_nms  = rpn_test_post_nms
         # Use {} to warp non HybridBlock
         self._additional_output = additional_output
-        self.num_blocks = 1 
+        self.num_blocks = 2 
         self.image_width = 512
         self.image_height = 512
         self.patch_width = 16
@@ -175,9 +175,9 @@ class HORelationNet(HORelationBase):
                 self.num_class, weight_initializer=mx.init.Normal(0.01)
             )
 
-            # self.to_scanpath = nn.Dense(
-            #     1, weight_initializer=mx.init.Normal(0.01)
-            # )
+            self.to_scanpath = nn.Dense(
+                1024, weight_initializer=mx.init.Normal(0.01)
+            )
 
             # self.ctx_class_predictor = nn.Dense(
             #     self.num_class, weight_initializer=mx.init.Normal(0.01)
@@ -304,7 +304,7 @@ class HORelationNet(HORelationBase):
 
         # ctx_cls_pred = ctx_cls_pred.max(axis=1, keepdims=True)
         # cls_pred = F.broadcast_add(cls_pred, ctx_cls_pred)
-        extra_data = relation_ctx_feat[1:]
+        extra_data = self.to_scanpath(relation_ctx_feat[1:])
 
         if self._additional_output:
             return cls_pred, relation, extra_data
