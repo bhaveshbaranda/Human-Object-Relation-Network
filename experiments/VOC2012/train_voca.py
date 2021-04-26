@@ -101,7 +101,7 @@ class RCNNAccMetric(mx.metric.EvalMetric):
         # print(pred_label)
 
         print(rcnn_label, rcnn_label_sp)
-        rcnn_label = mx.nd.Concat(rcnn_label, rcnn_label_sp, dim=0)
+        rcnn_label = mx.nd.Concat(rcnn_label, rcnn_label_sp.reshape(1,-1), dim=1)
         print(rcnn_label)
 
         # print(pred_label, rcnn_label.transpose())
