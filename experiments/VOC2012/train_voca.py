@@ -178,7 +178,7 @@ def validate(net, val_data, ctx, eval_metric):
         for data, label, box in zip(*batch):
             gt_box = label[:, :, :4]
             # get prediction results
-            cls_score, _ = net(data, gt_box, box)
+            cls_score = net(data, gt_box, box)
             # shape (B, N, C)
             cls_score = mx.nd.softmax(cls_score, axis=-1)
             cls_scores.append(cls_score[:, :, :])
@@ -283,7 +283,7 @@ def train(net, train_data, val_data, eval_metric, ctx, args):
                 for data, label, box in zip(*batch):
                     gt_label = label[:, :, 4:5].squeeze(axis=-1)
                     gt_box = label[:, :, :4]
-                    cls_pred, pred_scanpath = net(data, gt_box, box)
+                    cls_pred = net(data, gt_box, box)
                     # print(data.shape, box.shape, gt_box.shape)
                     # print(cls_pred.shape)
                     # pdb.set_trace()
