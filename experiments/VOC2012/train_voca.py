@@ -1,5 +1,5 @@
 import sys
-#sys.path.append('./Human-Object-Relation-Network')
+sys.path.append('./Human-Object-Relation-Network')
 from libgcv.nn.lr_schedule import CosineAnnealingSchedule
 from libgcv.utils.metrics.voc_multi_classification import VOCMultiClsMApMetric
 from libgcv.data.transforms.presets.horelation import HORelationDefaultTrainTransform, HORelationDefaultValTransform
