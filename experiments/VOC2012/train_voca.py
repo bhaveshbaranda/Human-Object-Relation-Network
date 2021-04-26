@@ -100,9 +100,9 @@ class RCNNAccMetric(mx.metric.EvalMetric):
         pred_label = mx.nd.Concat(pred_label, pred_label_sp, dim=1)
         # print(pred_label)
 
-        # print(rcnn_label, rcnn_label_sp)
+        print(rcnn_label, rcnn_label_sp)
         rcnn_label = mx.nd.Concat(rcnn_label, rcnn_label_sp, dim=1)
-        # print(rcnn_label)
+        print(rcnn_label)
 
         # print(pred_label, rcnn_label.transpose())
         num_acc = mx.nd.sum(pred_label == rcnn_label.transpose())
