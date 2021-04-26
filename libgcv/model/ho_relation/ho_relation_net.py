@@ -175,9 +175,9 @@ class HORelationNet(HORelationBase):
                 self.num_class, weight_initializer=mx.init.Normal(0.01)
             )
 
-            self.to_scanpath = nn.Dense(
-                1024, weight_initializer=mx.init.Normal(0.01)
-            )
+#             self.to_scanpath = nn.Dense(
+#                 1024, weight_initializer=mx.init.Normal(0.01)
+#             )
 
             # self.ctx_class_predictor = nn.Dense(
             #     self.num_class, weight_initializer=mx.init.Normal(0.01)
@@ -304,11 +304,11 @@ class HORelationNet(HORelationBase):
 
         # ctx_cls_pred = ctx_cls_pred.max(axis=1, keepdims=True)
         # cls_pred = F.broadcast_add(cls_pred, ctx_cls_pred)
-        extra_data = self.to_scanpath(relation_ctx_feat[1:])
+#         extra_data = self.to_scanpath(relation_ctx_feat[1:])
 
         if self._additional_output:
-            return cls_pred, relation, extra_data
-        return cls_pred, extra_data
+            return cls_pred, relation#, extra_data
+        return cls_pred#, extra_data
     
     def get_indices(self, boxes):
         W, H = self.image_width, self.image_height
