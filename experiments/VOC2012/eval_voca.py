@@ -44,7 +44,7 @@ def parse_args():
 
 def get_dataset(dataset, args):
     if dataset.lower() == 'voca':
-        val_dataset = gdata.VOCAction(split='val', load_box=True, preload_label=args.eval_all)
+        val_dataset = gdata.VOCAction(split='test', load_box=True, preload_label=args.eval_all)
         val_metric = VOCMultiClsMApMetric(class_names=val_dataset.classes, ignore_label=-1, voc_action_type=True)
     else:
         raise NotImplementedError('Dataset: {} not implemented.'.format(dataset))
