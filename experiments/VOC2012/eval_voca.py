@@ -82,6 +82,7 @@ def validate(net, val_data, ctx, eval_metric, size):
                 gt_box = label[:, :, :4]
                 # get prediction results
                 cls_score = net(data, gt_box, box)
+                print(cls_score)
                 # shape (B, N, C)
                 cls_score = mx.nd.softmax(cls_score, axis=-1)
                 cls_scores.append(cls_score[:, :, :])
@@ -90,7 +91,7 @@ def validate(net, val_data, ctx, eval_metric, size):
             # update metric
             for score, gt_class in zip(cls_scores, gt_classes):
                 eval_metric.update(score, gt_class)
-                print(eval_metric.get())
+#                 print(eval_metric.get())
             pbar.update(len(ctx))
     return eval_metric.get()
 
@@ -106,7 +107,7 @@ if __name__ == '__main__':
     # network
     net_name = '_'.join(('horelation', args.network, args.dataset))
     args.save_prefix += net_name
-    net = libgcv.model.get_model(net_name, pretrained=True)
+    net = libgcv.model.get_model(net_name, pretrained=False)
 
     # testing data
     val_dataset, eval_metric = get_dataset(args.dataset, args)
