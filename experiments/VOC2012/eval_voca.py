@@ -90,6 +90,7 @@ def validate(net, val_data, ctx, eval_metric, size):
             # update metric
             for score, gt_class in zip(cls_scores, gt_classes):
                 eval_metric.update(score, gt_class)
+                print(eval_metric.get())
             pbar.update(len(ctx))
     return eval_metric.get()
 
