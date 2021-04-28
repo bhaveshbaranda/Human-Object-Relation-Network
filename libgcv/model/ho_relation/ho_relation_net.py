@@ -148,7 +148,7 @@ class HORelationNet(HORelationBase):
         self._rpn_test_post_nms  = rpn_test_post_nms
         # Use {} to warp non HybridBlock
         self._additional_output = additional_output
-        self.num_blocks = 2 
+        self.num_blocks = 1 
         self.image_width = 512
         self.image_height = 512
         self.patch_width = 16
