@@ -87,11 +87,12 @@ def validate(net, val_data, ctx, eval_metric, size):
                 cls_score = mx.nd.softmax(cls_score, axis=-1)
                 cls_scores.append(cls_score[:, :, :])
                 gt_classes.append(label[:, :, 5:])
+                print(cls_score, gt_classes)
 
             # update metric
             for score, gt_class in zip(cls_scores, gt_classes):
                 eval_metric.update(score, gt_class)
-                print(gt_class)
+#                 print(gt_class) Wrong output aaraha hai idhar
             pbar.update(len(ctx))
     return eval_metric.get()
 
