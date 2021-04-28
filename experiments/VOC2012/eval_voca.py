@@ -80,6 +80,7 @@ def validate(net, val_data, ctx, eval_metric, size):
             gt_classes = []
             for data, label, box in zip(*batch):
                 gt_box = label[:, :, :4]
+                print(label, box)
                 # get prediction results
                 cls_score = net(data, gt_box, box)
 #                 print(cls_score)
@@ -87,7 +88,7 @@ def validate(net, val_data, ctx, eval_metric, size):
                 cls_score = mx.nd.softmax(cls_score, axis=-1)
                 cls_scores.append(cls_score[:, :, :])
                 gt_classes.append(label[:, :, 5:])
-                print(cls_score, gt_classes)
+#                 print(cls_score, gt_classes)
 
             # update metric
             for score, gt_class in zip(cls_scores, gt_classes):
