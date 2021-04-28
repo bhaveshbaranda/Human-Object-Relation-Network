@@ -106,7 +106,7 @@ if __name__ == '__main__':
     # network
     net_name = '_'.join(('horelation', args.network, args.dataset))
     args.save_prefix += net_name
-    net = libgcv.model.get_model(net_name, pretrained=False)
+    net = libgcv.model.get_model(net_name, pretrained=True)
 
     # testing data
     val_dataset, eval_metric = get_dataset(args.dataset, args)
